@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Simulador interactivo del cruce de cuatro ramas: juego puro, norma, subasta y semáforo.">
+<title>Simulador del cruce</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: una columna en el móvil (cruce arriba, mandos y métricas debajo); dos columnas desde 860px */
+:root {
+  --bg: #fbfcf8;
+  --surface: #f2f7e9;
+  --line: #d6e6bb;
+  --fg: #1d2416;
+  --muted: #5b6650;
+  --accent: #6aa300;
+  --accent-strong: #3f6212;
+  --on-accent: #ffffff;
+  --grass: #e6f0d6;
+  --road: #9aa09a;
+  --box: #a6aba6;
+  --box-hit: #f3a7a7;
+  --paint: #ffffff;
+  --label: #3f6212;
+  --bad: #c0261c;
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12160e; --surface: #1b2214; --line: #2f3b22; --fg: #e8eedf; --muted: #a3ae96;
+    --accent: #8cc63f; --accent-strong: #b5e07a; --on-accent: #12160e;
+    --grass: #1f2a15; --road: #4b514b; --box: #565c56; --box-hit: #7f2a24; --paint: #d9ded6; --label: #b5e07a; --bad: #ff8a80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12160e; --surface: #1b2214; --line: #2f3b22; --fg: #e8eedf; --muted: #a3ae96;
+  --accent: #8cc63f; --accent-strong: #b5e07a; --on-accent: #12160e;
+  --grass: #1f2a15; --road: #4b514b; --box: #565c56; --box-hit: #7f2a24; --paint: #d9ded6; --label: #b5e07a; --bad: #ff8a80;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 28px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+header h1 { font-size: clamp(1.45rem, 4.5vw, 2rem); font-weight: 800; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 62ch; }
+.app { display: grid; grid-template-columns: 1fr; gap: 18px; }
+@media (min-width: 860px) { .app { grid-template-columns: minmax(0, 420px) minmax(0, 1fr); align-items: start; } }
+.lienzo { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+svg#cruce { width: 100%; max-width: 420px; height: auto; display: block; border-radius: 14px; }
+.coche { transition: transform 0.32s ease; }
+@media (prefers-reduced-motion: reduce) { .coche { transition: none; } }
+.estado { font-weight: 700; font-size: 0.95rem; text-align: center; font-variant-numeric: tabular-nums; }
+.estado.malo { color: var(--bad); }
+.leyenda { font-size: 0.78rem; color: var(--muted); text-align: center; max-width: 420px; }
+.panel { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.grupo { display: flex; flex-direction: column; gap: 6px; }
+.etq { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--label); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+button {
+  font: inherit; font-size: 0.9rem; font-weight: 600; padding: 8px 14px; min-height: 40px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer;
+}
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+button.principal { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--bg); min-width: 128px; }
+button:disabled { opacity: 0.45; cursor: default; }
+.fila2 { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 520px) { .fila2 { grid-template-columns: auto 1fr; } }
+.metricas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.m { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; min-width: 0; }
+.m b { font-size: clamp(1.15rem, 4.6vw, 1.5rem); line-height: 1.2; font-variant-numeric: tabular-nums; }
+.m span { font-size: 0.72rem; color: var(--muted); line-height: 1.25; }
+.m.alerta b { color: var(--bad); }
+.m.poa { background: var(--accent-strong); border-color: var(--accent-strong); }
+.m.poa b, .m.poa span { color: var(--bg); }
+.nota { font-size: 0.78rem; color: var(--muted); }
+.reglas { border-top: 1px solid var(--line); padding-top: 14px; display: grid; grid-template-columns: 1fr; gap: 10px 28px; }
+@media (min-width: 720px) { .reglas { grid-template-columns: 1fr 1fr; } }
+.reglas h2 { grid-column: 1 / -1; font-size: 1.05rem; margin: 0; }
+.reglas div { min-width: 0; }
+.reglas h3 { font-size: 0.9rem; margin: 0 0 2px; color: var(--label); }
+.reglas p { margin: 0; font-size: 0.86rem; color: var(--muted); max-width: 62ch; }
+footer { font-size: 0.75rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Simulador del cruce</h1>
+    <p>Un cruce de cuatro ramas sin semáforos. Elige cómo se coordinan los coches y mira cuánto se pierde frente a un gestor ideal.</p>
+  </header>
+
+  <main class="app">
+    <section class="lienzo" aria-label="Cruce">
+      <svg id="cruce" viewBox="0 0 360 360" role="img" aria-label="Cruce de cuatro ramas con las colas de coches">
+        <rect x="0" y="0" width="360" height="360" fill="var(--grass)" />
+        <rect x="140" y="0" width="80" height="360" fill="var(--road)" />
+        <rect x="0" y="140" width="360" height="80" fill="var(--road)" />
+        <rect id="centro" x="140" y="140" width="80" height="80" fill="var(--box)" />
+        <g stroke="var(--paint)" stroke-width="2" stroke-dasharray="10 8">
+          <line x1="180" y1="0" x2="180" y2="136" /><line x1="180" y1="224" x2="180" y2="360" />
+          <line x1="0" y1="180" x2="136" y2="180" /><line x1="224" y1="180" x2="360" y2="180" />
+        </g>
+        <line id="stop-S" x1="180" y1="224" x2="220" y2="224" stroke="var(--paint)" stroke-width="5" />
+        <line id="stop-N" x1="140" y1="136" x2="180" y2="136" stroke="var(--paint)" stroke-width="5" />
+        <line id="stop-E" x1="224" y1="140" x2="224" y2="180" stroke="var(--paint)" stroke-width="5" />
+        <line id="stop-O" x1="136" y1="180" x2="136" y2="220" stroke="var(--paint)" stroke-width="5" />
+        <g font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="var(--label)">
+          <text x="226" y="18">Norte</text>
+          <text x="132" y="350" text-anchor="end">Sur</text>
+          <text x="352" y="252" text-anchor="end">Este</text>
+          <text x="8" y="128">Oeste</text>
+        </g>
+        <g id="coches"></g>
+        <g id="extras" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="var(--fg)"></g>
+        <g id="choque" hidden>
+          <polygon points="180,138 189,165 218,160 196,180 214,205 186,194 180,224 172,195 144,206 163,181 142,160 171,166" fill="#dc2626" stroke="#7f1d1d" stroke-width="2" />
+          <text x="180" y="185" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="800" fill="#ffffff">¡choque!</text>
+        </g>
+      </svg>
+      <div id="estado" class="estado" aria-live="polite">Ronda 0</div>
+      <div id="leyenda" class="leyenda"></div>
+    </section>
+
+    <section class="panel" aria-label="Mandos y resultados">
+      <div class="grupo">
+        <span class="etq" id="lbl-modo">Modo de coordinación</span>
+        <div class="seg" role="group" aria-labelledby="lbl-modo" id="modos"></div>
+      </div>
+      <div class="fila2">
+        <div class="grupo">
+          <span class="etq" id="lbl-ratio">C/w (choque frente a espera)</span>
+          <div class="seg" role="group" aria-labelledby="lbl-ratio" id="ratios"></div>
+        </div>
+        <div class="grupo">
+          <span class="etq" id="lbl-traf">Tráfico</span>
+          <div class="seg" role="group" aria-labelledby="lbl-traf" id="traficos"></div>
+        </div>
+      </div>
+      <div class="seg">
+        <button id="b-play" class="principal" type="button">▶ Empezar</button>
+        <button id="b-paso" type="button">Una ronda</button>
+        <button id="b-vel" type="button" aria-pressed="false">Rápido</button>
+        <button id="b-reset" type="button">Reiniciar</button>
+      </div>
+      <div class="metricas">
+        <div class="m"><b id="k-cruz">0</b><span>han cruzado</span></div>
+        <div class="m" id="m-col"><b id="k-col">0</b><span>colisiones</span></div>
+        <div class="m"><b id="k-blo">0</b><span>bloqueos mutuos</span></div>
+        <div class="m"><b id="k-ret">—</b><span>retraso medio (s)</span></div>
+        <div class="m"><b id="k-max">0</b><span>espera máx. en cabeza (s)</span></div>
+        <div class="m poa"><b id="k-poa">—</b><span>precio de la anarquía</span></div>
+      </div>
+      <p class="nota">El precio de la anarquía compara el coste total (esperas más colisiones) con el de un gestor central que recibe las mismas llegadas y da paso cada ronda al eje con más coste de espera. Aparece a partir de la ronda 30. Cambiar una opción reinicia con las mismas llegadas, para comparar modos.</p>
+    </section>
+  </main>
+
+  <section class="reglas" aria-label="Reglas">
+    <h2>Qué estás viendo</h2>
+    <div><h3>Rondas de 1 segundo</h3><p>Solo decide el primero de cada cola: ceder o cruzar. Al llegar a la cabeza pasa una ronda observando (borde discontinuo), que es su tiempo de reacción. Ramas opuestas cruzan a la vez; dos perpendiculares que cruzan a la vez chocan.</p></div>
+    <div><h3>Juego puro</h3><p>Cada coche egoísta cruza con la probabilidad de equilibrio q* = √(w/C). Si chocar es caro, casi nunca se arriesga y aparecen bloqueos mutuos. Si la rama perpendicular está reaccionando, cruza seguro.</p></div>
+    <div><h3>Norma</h3><p>Prioridad a la derecha. Quien tiene un coche a su derecha cede, salvo que su impaciencia w·(1+τ) supere la sanción y la otra rama esté reaccionando. Con las cuatro ramas ocupadas, pasa quien llegó antes.</p></div>
+    <div><h3>Subasta y semáforo</h3><p>En la subasta cada coche puja su coste de espera actual y cruza el eje con la puja más alta (el número sobre el coche). El semáforo da 10 rondas a cada eje, venga quien venga.</p></div>
+  </section>
+
+  <footer>Vehículos Autónomos en Cruces Inteligentes · Sistemas Basados en Agentes · Raúl Vázquez, Enrique Quiroga y Hugo Martínez. Vista previa con las reglas de la memoria técnica; no son los resultados del proyecto.</footer>
+</div>
+
+<script>
+(() => {
+  // ---------------------------------------------------------------- lógica (reglas de la memoria)
+  const RAMAS = ['N', 'E', 'S', 'O'];
+  const eje = (r) => (r === 'N' || r === 'S' ? 'NS' : 'EO');
+  const DERECHA = { S: 'E', E: 'N', N: 'O', O: 'S' };
+  const F_REL = 2, FASE = 10;
+  function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  const nuevaSim = () => ({ ronda: 0, colas: { N: [], E: [], S: [], O: [] }, cruzados: 0, choques: 0, bloqueos: 0, sumaRetraso: 0, esperaMax: 0, coste: 0, ultimo: { cruzan: [], choque: false, texto: 'Pulsa Empezar' } });
+  function llegadas(r, lambda) { const out = []; for (const rama of RAMAS) if (r() < lambda) out.push({ rama, w: 1 + Math.floor(r() * 10) }); return out; }
+  let sigId = 1;
+  function paso(sim, lls, modo, ratio, rDec) {
+    const t = ++sim.ronda;
+    for (const l of lls) sim.colas[l.rama].push({ id: sigId++, rama: l.rama, w: l.w, llegada: t, cabeza: null });
+    const cabezas = [];
+    for (const rama of RAMAS) { const v = sim.colas[rama][0]; if (!v) continue; if (v.cabeza === null) v.cabeza = t; cabezas.push(v); }
+    const tau = (v) => t - v.cabeza;
+    const deciden = cabezas.filter((v) => tau(v) >= 1);
+    const perp = (v, l) => l.filter((u) => eje(u.rama) !== eje(v.rama));
+    let cruzan = [];
+    if (modo === 'puro') {
+      const q = Math.sqrt(1 / ratio);
+      for (const v of deciden) { if (!perp(v, deciden).length || rDec() < q) cruzan.push(v); }
+    } else if (modo === 'norma') {
+      const cuatro = cabezas.length === 4;
+      for (const v of deciden) {
+        const p = perp(v, cabezas);
+        if (!p.length) { cruzan.push(v); continue; }
+        if (cuatro) { if (p.every((u) => v.cabeza < u.cabeza || (v.cabeza === u.cabeza && v.id < u.id))) cruzan.push(v); continue; }
+        if (!sim.colas[DERECHA[v.rama]][0]) { cruzan.push(v); continue; }
+        if (1 + tau(v) >= F_REL && !perp(v, deciden).length) cruzan.push(v);
+      }
+    } else if (modo === 'subasta' || modo === 'optimo') {
+      const valor = (l) => modo === 'subasta' ? Math.max(0, ...l.map((v) => v.w * (1 + tau(v)))) : l.reduce((s, v) => s + v.w * (1 + tau(v)), 0);
+      const ns = deciden.filter((v) => eje(v.rama) === 'NS'), eo = deciden.filter((v) => eje(v.rama) === 'EO');
+      cruzan = (!ns.length || !eo.length) ? deciden : (valor(ns) >= valor(eo) ? ns : eo);
+    } else if (modo === 'semaforo') {
+      const verde = Math.floor((t - 1) / FASE) % 2 === 0 ? 'NS' : 'EO';
+      cruzan = deciden.filter((v) => eje(v.rama) === verde);
+    }
+    const choque = new Set(cruzan.map((v) => eje(v.rama))).size > 1;
+    for (const v of cruzan) {
+      sim.colas[v.rama].shift();
+      if (choque) sim.coste += ratio * v.w;
+      else { sim.cruzados++; sim.sumaRetraso += t - v.llegada; sim.esperaMax = Math.max(sim.esperaMax, t - v.cabeza); }
+    }
+    if (choque) sim.choques++;
+    const conflicto = deciden.length > 0 && new Set(deciden.map((v) => eje(v.rama))).size > 1;
+    const bloqueo = conflicto && !cruzan.length;
+    if (bloqueo) sim.bloqueos++;
+    for (const rama of RAMAS) for (const v of sim.colas[rama]) sim.coste += v.w;
+    const nombres = cruzan.map((v) => ({ N: 'Norte', S: 'Sur', E: 'Este', O: 'Oeste' })[v.rama]).join(' y ');
+    sim.ultimo = { cruzan: cruzan.map((v) => ({ ...v })), choque,
+      texto: choque ? `¡Colisión entre ${nombres}!` : bloqueo ? 'Bloqueo mutuo: todos ceden' : cruzan.length ? `Cruza${cruzan.length > 1 ? 'n' : ''} ${nombres}` : cabezas.length ? 'Ronda de reacción: observan' : 'Cruce vacío' };
+  }
+
+  // ---------------------------------------------------------------- estado de la página
+  const MODOS = [['puro', 'Juego puro'], ['norma', 'Norma'], ['subasta', 'Subasta'], ['semaforo', 'Semáforo']];
+  const RATIOS = [5, 20, 100];
+  const TRAFICOS = [[0.1, 'Bajo'], [0.18, 'Medio'], [0.25, 'Alto']];
+  const SEMILLA = 7;
+  const st = { modo: 'puro', ratio: 20, lambda: 0.18, rapido: false, timer: null };
+  let sim, ref, rA, rD;
+
+  const $ = (id) => document.getElementById(id);
+  function botones(cont, items, clave) {
+    const el = $(cont);
+    for (const [v, txt] of items) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = txt; b.dataset.v = String(v);
+      b.addEventListener('click', () => { st[clave] = typeof v === 'number' ? v : v; marcar(); reiniciar(); });
+      el.appendChild(b);
+    }
+  }
+  botones('modos', MODOS, 'modo');
+  botones('ratios', RATIOS.map((r) => [r, String(r)]), 'ratio');
+  botones('traficos', TRAFICOS, 'lambda');
+  function marcar() {
+    for (const [cont, clave] of [['modos', 'modo'], ['ratios', 'ratio'], ['traficos', 'lambda']])
+      for (const b of $(cont).children) b.setAttribute('aria-pressed', String(b.dataset.v === String(st[clave])));
+    $('b-vel').setAttribute('aria-pressed', String(st.rapido));
+    const ley = { puro: '', norma: ' Prioridad a la derecha.', subasta: ' Número: puja b = w·(1+τ).', semaforo: ` Fases de ${FASE} rondas: línea verde, puede cruzar.` };
+    $('leyenda').textContent = 'Borde discontinuo: ronda de reacción.' + ley[st.modo];
+  }
+
+  function reiniciar() {
+    parar();
+    sim = nuevaSim(); ref = nuevaSim();
+    rA = rng(SEMILLA); rD = rng(SEMILLA * 7 + 3);
+    dibujar();
+  }
+  function una() {
+    const l = llegadas(rA, st.lambda);
+    paso(sim, l, st.modo, st.ratio, rD);
+    paso(ref, l, 'optimo', st.ratio, rD);
+    dibujar();
+  }
+  function arrancar() { if (st.timer) return; st.timer = setInterval(una, st.rapido ? 220 : 650); $('b-play').textContent = '❚❚ Pausa'; $('b-paso').disabled = true; }
+  function parar() { if (st.timer) clearInterval(st.timer); st.timer = null; $('b-play').textContent = '▶ Empezar'; $('b-paso').disabled = false; }
+  $('b-play').addEventListener('click', () => (st.timer ? parar() : arrancar()));
+  $('b-paso').addEventListener('click', una);
+  $('b-reset').addEventListener('click', reiniciar);
+  $('b-vel').addEventListener('click', () => { st.rapido = !st.rapido; marcar(); if (st.timer) { parar(); arrancar(); } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) parar(); });
+
+  // ---------------------------------------------------------------- dibujo
+  const NS = 'http://www.w3.org/2000/svg';
+  const COLOR = { E: '#2563eb', S: '#ea7317', N: '#7c3aed', O: '#0d9488' };
+  const ESPERA = { S: [200, 247], N: [160, 113], E: [247, 160], O: [113, 200] };
+  const CRUZA = { S: [200, 178], N: [160, 182], E: [178, 160], O: [182, 200] };
+  const PASOQ = { S: [0, 34], N: [0, -34], E: [34, 0], O: [-34, 0] };
+  const POS_EXTRA = { S: [228, 350, 'start'], N: [132, 18, 'end'], E: [352, 128, 'end'], O: [8, 236, 'start'] };
+  const VISIBLES = 4;
+  const vivos = new Map();
+  const vertical = (r) => r === 'N' || r === 'S';
+  const fmt = (x, d = 1) => x.toLocaleString('es-ES', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  function coche(c) {
+    let g = vivos.get(c.id);
+    if (!g) {
+      g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'coche');
+      const r = document.createElementNS(NS, 'rect');
+      const v = vertical(c.rama);
+      r.setAttribute('x', v ? -11 : -17); r.setAttribute('y', v ? -17 : -11);
+      r.setAttribute('width', v ? 22 : 34); r.setAttribute('height', v ? 34 : 22); r.setAttribute('rx', 5);
+      r.setAttribute('fill', COLOR[c.rama]);
+      const tx = document.createElementNS(NS, 'text');
+      tx.setAttribute('x', 0); tx.setAttribute('y', 4); tx.setAttribute('text-anchor', 'middle');
+      tx.setAttribute('font-family', 'Inter, system-ui, sans-serif'); tx.setAttribute('font-size', 11); tx.setAttribute('font-weight', 700); tx.setAttribute('fill', '#ffffff');
+      g.append(r, tx);
+      g.style.transform = `translate(${c.x}px, ${c.y}px)`;
+      $('coches').appendChild(g); vivos.set(c.id, g);
+    }
+    const r = g.firstChild, tx = g.lastChild;
+    r.setAttribute('opacity', c.cabeza ? 1 : 0.5);
+    r.setAttribute('stroke', c.reacciona ? 'var(--fg)' : c.cruza && !c.choque ? '#ffffff' : 'none');
+    r.setAttribute('stroke-width', c.reacciona ? 2.5 : 2);
+    r.setAttribute('stroke-dasharray', c.reacciona ? '4 3' : '');
+    tx.textContent = st.modo === 'subasta' && c.puja ? c.puja : '';
+    requestAnimationFrame(() => { g.style.transform = `translate(${c.x}px, ${c.y}px)`; });
+  }
+
+  function dibujar() {
+    const lista = [];
+    for (const rama of RAMAS) sim.colas[rama].slice(0, VISIBLES).forEach((v, k) => {
+      const tau = v.cabeza === null ? -1 : sim.ronda - v.cabeza;
+      lista.push({ id: v.id, rama, x: ESPERA[rama][0] + PASOQ[rama][0] * k, y: ESPERA[rama][1] + PASOQ[rama][1] * k, cabeza: k === 0, reacciona: k === 0 && tau <= 0, puja: k === 0 && tau >= 1 ? v.w * (1 + tau) : null });
+    });
+    for (const v of sim.ultimo.cruzan) lista.push({ id: v.id, rama: v.rama, x: CRUZA[v.rama][0], y: CRUZA[v.rama][1], cabeza: true, cruza: true, choque: sim.ultimo.choque });
+    const ids = new Set(lista.map((c) => c.id));
+    for (const [id, g] of vivos) if (!ids.has(id)) { g.remove(); vivos.delete(id); }
+    lista.forEach(coche);
+
+    const ex = $('extras'); ex.textContent = '';
+    for (const r of RAMAS) {
+      const n = sim.colas[r].length - VISIBLES;
+      if (n <= 0) continue;
+      const t = document.createElementNS(NS, 'text');
+      t.setAttribute('x', POS_EXTRA[r][0]); t.setAttribute('y', POS_EXTRA[r][1]); t.setAttribute('text-anchor', POS_EXTRA[r][2]);
+      t.textContent = '+' + n; ex.appendChild(t);
+    }
+    $('choque').hidden = !sim.ultimo.choque;
+    $('centro').setAttribute('fill', sim.ultimo.choque ? 'var(--box-hit)' : 'var(--box)');
+    const verde = st.modo !== 'semaforo' ? null : Math.floor(Math.max(0, sim.ronda - 1) / FASE) % 2 === 0 ? 'NS' : 'EO';
+    for (const r of RAMAS) $('stop-' + r).setAttribute('stroke', verde === null ? 'var(--paint)' : eje(r) === verde ? '#22c55e' : '#ef4444');
+
+    $('estado').textContent = `Ronda ${sim.ronda} · ${sim.ultimo.texto}`;
+    $('estado').classList.toggle('malo', sim.ultimo.choque);
+    $('k-cruz').textContent = sim.cruzados;
+    $('k-col').textContent = sim.choques;
+    $('m-col').classList.toggle('alerta', sim.choques > 0);
+    $('k-blo').textContent = sim.bloqueos;
+    $('k-ret').textContent = sim.cruzados ? fmt(sim.sumaRetraso / sim.cruzados) : '—';
+    $('k-max').textContent = sim.esperaMax;
+    $('k-poa').textContent = sim.ronda >= 30 && ref.coste > 0 ? fmt(sim.coste / ref.coste, 2) : '—';
+  }
+
+  // estado inicial con algo de tráfico para que la primera vista ya muestre el cruce funcionando
+  marcar(); reiniciar();
+  for (let i = 0; i < 69; i++) una();
+})();
+</script>
+</body>
+</html>
